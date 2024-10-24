@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Name=MARPLE
+Comment=MARPLE GUI Application
+Exec=sh -c '/home/marple/micromamba/bin/mamba run -n marple-env python3 /home/marple/marple-gui-dev/marple-gui.py > /tmp/marple-gui.log 2>&1'
+Icon=/home/marple/marple-gui-dev/MARPLE_justlogo.png
+Terminal=false
+Type=Application
+Categories=Utility;Application;
