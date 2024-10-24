@@ -14,8 +14,6 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         
-        self.tk.call('tk', 'scaling', 2.0)
-        
         self.colmode = "light"
         self.colswitch = "#dbdbdb"
         self.update_mode()
@@ -33,8 +31,6 @@ class App(ctk.CTk):
         self.barcode_rows = []
         self.transfer_type = 'Pgt'
         self.minknow_dir = ""
-
-        # Image setup
         
         logo_path = os.path.join(self.marpleguidir, "MARPLE_logo.png")
         try:
@@ -43,7 +39,7 @@ class App(ctk.CTk):
             print(f"Error loading image: {e}")
             logo_image = None
         
-        self.logo_label = ctk.CTkLabel(self, image=logo_image, text="", bg_color=self.colswitch)
+        self.logo_label = ctk.CTkLabel(self, image=logo_image, text="")#, bg_color=self.colswitch)
         self.logo_label.pack(pady=(20, 10))
 
         # Menu setup (Sandwich Menu)
@@ -93,7 +89,6 @@ class App(ctk.CTk):
         self.theme_menu.entryconfig(0, label=f'{"Dark mode" if self.colmode == "light" else "Light mode"}')
 
     def update_ui(self):
-        self.logo_label.configure(bg_color=self.colswitch)
         if self.dynamic_frame:
             self.dynamic_frame.configure(bg_color=self.colswitch)
 
@@ -111,12 +106,8 @@ class App(ctk.CTk):
         self.select_dir_button = ctk.CTkButton(self.dynamic_frame, command=self.select_experiment, text="Select MinKNOW Directory", corner_radius=1, font=self.font)
         self.select_dir_button.pack(pady=(20, 10))
 
-        self.expname_label = ctk.CTkLabel(self.dynamic_frame, text="Experiment Name: ", corner_radius=1, font=self.font)
+        self.expname_label = ctk.CTkLabel(self.dynamic_frame, text="Experiment Name: ", corner_radius=1, font=self.large_font)
         self.expname_label.pack(pady=(10, 20))
-
-        self.segmented_button = ctk.CTkSegmentedButton(self.dynamic_frame, values=['Pgt', 'Pst'], command=self.on_segmented_button_click, corner_radius=1, font=self.font)
-        self.segmented_button.set('Pgt')
-        self.segmented_button.pack(pady=(10, 20))
 
         self.add_row_button = ctk.CTkButton(self.dynamic_frame, text="Add Barcode Row", command=self.add_barcode_row, corner_radius=1, font=self.font)
         self.add_row_button.pack(pady=(10, 20))
@@ -125,7 +116,7 @@ class App(ctk.CTk):
         self.transfer_reads_button.pack(pady=(10, 20))
 
         # Create a frame with a scrollbar
-        self.canvas = ctk.CTkCanvas(self.dynamic_frame, bg=self.colswitch)
+        self.canvas = ctk.CTkCanvas(self.dynamic_frame, bg=self.colswitch, width=300,height=100)
         self.scrollbar = ttk.Scrollbar(self.dynamic_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = ctk.CTkFrame(self.canvas, bg_color=self.colswitch, corner_radius=1)
 
@@ -134,14 +125,18 @@ class App(ctk.CTk):
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        # Limit the height of the canvas (5 rows height)
-        self.canvas.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=20)
-        self.scrollbar.pack(side="right", fill="y")
+        # Check if there are barcode rows
+        if self.has_barcode_rows():
+            self.canvas.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=20)
+            self.scrollbar.pack(side="right", fill="y")
+
+    def has_barcode_rows(self):
+        return len(self.barcode_rows) > 0
 
     def add_barcode_row(self):
         row = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
         row.pack(fill="x", padx=5, pady=2)
-        row.grid_columnconfigure(0, weight=1)
+        # row.grid_columnconfigure(0, weight=1)
 
         barcode_label = ctk.CTkLabel(row, text="Barcode:", font=self.font)
         barcode_label.pack(side="left", padx=5)
@@ -155,11 +150,42 @@ class App(ctk.CTk):
         sample_entry = ctk.CTkEntry(row, width=200, corner_radius=1, font=self.font)
         sample_entry.pack(side="left", padx=5)
 
-        self.barcode_rows.append((barcode_entry, sample_entry))
-        
+        # Add a segmented button for Pgt/Pst
+        segmented_button = ctk.CTkSegmentedButton(row, values=['Pgt', 'Pst'], command=lambda choice, row=row: self.on_segmented_button_click(choice, row), corner_radius=1, font=self.font)
+        segmented_button.set('Pgt')  # Default value
+        segmented_button.pack(side="left", padx=(5, 10))
+
+        # Add a remove button
+        remove_button = ctk.CTkButton(row, text="Remove", command=lambda: self.remove_barcode_row(row), corner_radius=1, font=self.font)
+        remove_button.pack(side="left", padx=5)
+
+        self.barcode_rows.append((barcode_entry, sample_entry, segmented_button))
+
         # Enable scrolling if more than 5 rows
         if len(self.barcode_rows) > 5:
             self.canvas.configure(height=5 * 40)
+
+        # Ensure the canvas and scrollbar are packed
+        if not self.canvas.winfo_ismapped():
+            self.canvas.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=20)
+            self.scrollbar.pack(side="right", fill="y")
+
+    def remove_barcode_row(self, row):
+        # Remove the row from the barcode_rows list
+        for index, (barcode_entry, sample_entry, segmented_button) in enumerate(self.barcode_rows):
+            if barcode_entry == row.children['!ctkentry'] and sample_entry == row.children['!ctkentry2']:
+                del self.barcode_rows[index]
+                break
+        
+        # Destroy the row widget
+        row.destroy()
+
+        # Update the canvas and scrollbar if necessary
+        if len(self.barcode_rows) <= 5:
+            self.canvas.configure(height=len(self.barcode_rows) * 40)
+        if not self.has_barcode_rows():
+            self.canvas.pack_forget()
+            self.scrollbar.pack_forget()
 
     def show_about(self):
         self.clear_dynamic_frame()
@@ -169,8 +195,8 @@ class App(ctk.CTk):
         about_label = ctk.CTkLabel(self.dynamic_frame, text="MARPLE Diagnostics:\npoint-of-care, strain-level disease diagnostics and\nsurveillance tool for complex fungal pathogens\n\nVersion: 2.0-alpha", font=self.large_font)
         about_label.pack(pady=(20, 20))
 
-        devs_label = ctk.CTkLabel(self.dynamic_frame, text="Software and Legacy Code Developers:\nLoizos Savva\nAnthony Bryan\nGuru V. Radhakrishnan")
-        devs_label.pack(pady=(20, 20))
+        # devs_label = ctk.CTkLabel(self.dynamic_frame, text="Software and Legacy Code Developers:\nLoizos Savva\nAnthony Bryan\nGuru V. Radhakrishnan")
+        # devs_label.pack(pady=(20, 20))
         
         copyright_label = ctk.CTkLabel(self.dynamic_frame, text="© 2024 Saunders Lab")
         copyright_label.pack()
@@ -186,8 +212,11 @@ class App(ctk.CTk):
             self.output_text.pack_forget()
             del self.output_text
 
-    def on_segmented_button_click(self, choice):
-        self.transfer_type = choice
+    def on_segmented_button_click(self, choice, row):
+        # Find the index of the row to update
+        index = self.barcode_rows.index(next(item for item in self.barcode_rows if item[0] == row))
+        # Update the transfer type for that specific row
+        self.barcode_rows[index] = (self.barcode_rows[index][0], self.barcode_rows[index][1], choice)
 
     def select_experiment(self):
         default_dir = "/var/lib/minknow/data/"
@@ -219,9 +248,10 @@ class App(ctk.CTk):
                 self.progress_bar.pack_forget()
                 return
 
-            for barcode_entry, sample_entry in self.barcode_rows:
+            for barcode_entry, sample_entry, segmented_button in self.barcode_rows:
                 barcode = format(int(barcode_entry.get().strip()), '02d')
                 sample = sample_entry.get().strip()
+                transfer_type = segmented_button.get()  # Get the transfer type from the segmented button
 
                 if not barcode:
                     continue  # Skip empty barcode entries
@@ -231,7 +261,7 @@ class App(ctk.CTk):
                         if dir == 'pass':
                             barcode_dir = os.path.join(root, dir, f'barcode{barcode}')
                             try:
-                                output_file = os.path.join(self.marpledir, 'reads', self.transfer_type.lower(), f'{sample}.fastq.gz')
+                                output_file = os.path.join(self.marpledir, 'reads', transfer_type.lower(), f'{sample}.fastq.gz')
                                 with gzip.open(output_file, 'wb') as fout:
                                     for file in os.listdir(barcode_dir):
                                         if file.endswith(".gz"):
