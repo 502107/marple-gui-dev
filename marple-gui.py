@@ -1,5 +1,5 @@
 import os
-import gzip
+import shlex
 import psutil
 import shutil
 import threading
@@ -32,6 +32,12 @@ class App(ctk.CTk):
         self.transfer_type = 'Pgt'
         self.minknow_dir = ""
         
+        # Hold output lines
+        self.output_lines = []
+        ## Output text initialization
+        self.output_text = ctk.CTkTextbox(self, width=600, height=400)
+        self.output_text.configure(state="disabled")
+        
         logo_path = os.path.join(self.marpleguidir, "MARPLE_logo.png")
         try:
             logo_image = ctk.CTkImage(Image.open(logo_path), size=(600, 200))
@@ -42,7 +48,7 @@ class App(ctk.CTk):
         self.logo_label = ctk.CTkLabel(self, image=logo_image, text="")#, bg_color=self.colswitch)
         self.logo_label.pack(pady=(20, 10))
 
-        # Menu setup (Sandwich Menu)
+        # Menu
         self.menu_bar = Menu(self)
         self.config(menu=self.menu_bar)
 
@@ -68,6 +74,9 @@ class App(ctk.CTk):
         self.stop_button.pack(pady=(10, 20))
         self.snakemake_process = None
 
+        # Track tranfer status
+        self.transfer_in_progress = False
+    
         # Placeholder for dynamic content
         self.dynamic_frame = None
 
@@ -96,6 +105,7 @@ class App(ctk.CTk):
         self.clear_dynamic_frame()
         self.run_marple_button.pack(pady=(30, 30))
         self.stop_button.pack(pady=(10, 20))
+        self.output_text.pack(pady=(20, 20))
 
     def show_transfer_reads(self):
         self.clear_dynamic_frame()
@@ -201,17 +211,6 @@ class App(ctk.CTk):
         copyright_label = ctk.CTkLabel(self.dynamic_frame, text="© 2024 Saunders Lab")
         copyright_label.pack()
 
-    def clear_dynamic_frame(self):
-        if self.dynamic_frame:
-            self.dynamic_frame.destroy()
-        self.run_marple_button.pack_forget()
-        self.stop_button.pack_forget()
-        
-        # Clear output_text widget when switching pages
-        if hasattr(self, 'output_text'):
-            self.output_text.pack_forget()
-            del self.output_text
-
     def on_segmented_button_click(self, choice, row):
         # Find the index of the row to update
         index = self.barcode_rows.index(next(item for item in self.barcode_rows if item[0] == row))
@@ -219,33 +218,37 @@ class App(ctk.CTk):
         self.barcode_rows[index] = (self.barcode_rows[index][0], self.barcode_rows[index][1], choice)
 
     def select_experiment(self):
-        default_dir = "/var/lib/minknow/data/"
-        self.minknow_dir = filedialog.askdirectory(initialdir=default_dir)
-        if self.minknow_dir:
+        self.minknow_default_dir = "/var/lib/minknow/data"
+        self.minknow_dir = filedialog.askdirectory(initialdir=self.minknow_default_dir)
+        if self.minknow_dir and (self.minknow_dir != self.minknow_default_dir):
             expname = os.path.basename(self.minknow_dir)
             self.expname_label.configure(text=f"Experiment Name: {expname}")
 
     def transfer_reads(self):
-        if not self.minknow_dir:
+        if not self.minknow_dir or self.minknow_dir == self.minknow_default_dir:
             self.printin("MinKNOW directory not selected.")
             return
 
-        # Start the progress bar
+        # Check if a transfer is already in progress
+        if self.transfer_in_progress:
+            self.show_warning("Transfer Reads Process Running. Wait until it finishes.")
+            return
+
+        # Start the transfer process
+        self.transfer_in_progress = True
         self.progress_bar.pack(pady=(10, 20))
         self.progress_bar.configure(mode="indeterminate")
         self.progress_bar.start()
 
         # Run the task in a separate thread to avoid freezing the UI
-        thread = threading.Thread(target=self.process_reads)
-        thread.start()
+        self.transfer_thread = threading.Thread(target=self.process_reads)
+        self.transfer_thread.start()
 
     def process_reads(self):
         try:
             total_barcodes = len(self.barcode_rows)
             if total_barcodes == 0:
                 self.printin("No barcodes to process.")
-                self.progress_bar.stop()
-                self.progress_bar.pack_forget()
                 return
 
             for barcode_entry, sample_entry, segmented_button in self.barcode_rows:
@@ -254,7 +257,7 @@ class App(ctk.CTk):
                 transfer_type = segmented_button.get()  # Get the transfer type from the segmented button
 
                 if not barcode:
-                    continue  # Skip empty barcode entries
+                    continue
 
                 for root, dirs, files in os.walk(self.minknow_dir):
                     for dir in dirs:
@@ -262,22 +265,36 @@ class App(ctk.CTk):
                             barcode_dir = os.path.join(root, dir, f'barcode{barcode}')
                             try:
                                 output_file = os.path.join(self.marpledir, 'reads', transfer_type.lower(), f'{sample}.fastq.gz')
-                                with gzip.open(output_file, 'wb') as fout:
-                                    for file in os.listdir(barcode_dir):
-                                        if file.endswith(".gz"):
-                                            with gzip.open(os.path.join(barcode_dir, file), 'rb') as f:
-                                                reads = f.readlines()
-                                                fout.writelines(reads)
-                                        elif file.endswith(".fastq"):
-                                            with open(os.path.join(barcode_dir, file), 'rb') as f:
-                                                reads = f.readlines()
-                                                fout.writelines(reads)
+                                # with gzip.open(output_file, 'wb') as fout:
+                                #     for file in os.listdir(barcode_dir):
+                                #         if file.endswith(".gz"):
+                                #             with gzip.open(os.path.join(barcode_dir, file), 'rb') as f:
+                                #                 reads = f.readlines()
+                                #                 fout.writelines(reads)
+                                #         elif file.endswith(".fastq"):
+                                #             with open(os.path.join(barcode_dir, file), 'rb') as f:
+                                #                 reads = f.readlines()
+                                #                 fout.writelines(reads)
+                                command = f"cat {barcode_dir}/*.fastq.gz > {output_file}"
+                                subprocess.run(command, shell=True)
                                 self.printin(f"Successfully transferred reads for barcode{barcode} to {output_file}")
                             except Exception as e:
                                 self.printin(f"An error occurred while processing barcode{barcode}: {e}")
         finally:
-            self.progress_bar.stop()
-            self.progress_bar.pack_forget()
+            self.transfer_in_progress = False
+            self.stop_progress_bar()
+
+    def stop_progress_bar(self):
+        self.progress_bar.stop()
+        self.progress_bar.pack_forget()
+        
+    def clear_dynamic_frame(self):
+        if self.dynamic_frame:
+            self.dynamic_frame.destroy()
+        
+        self.run_marple_button.pack_forget()
+        self.stop_button.pack_forget()
+        self.output_text.pack_forget()
             
     def run_marple(self):
         # Start progress bar
@@ -294,13 +311,15 @@ class App(ctk.CTk):
         # Run the Snakemake process in a separate thread
         thread = threading.Thread(target=self.run_snakemake)
         thread.start()
+        
+        self.output_text.pack(pady=(20, 20))
 
     def run_snakemake(self):
         if shutil.which("mamba") is not None:
             try:
                 env_list = subprocess.check_output(["mamba", "env", "list"], text=True)
                 if "marple-env" in env_list:
-                    self.stop_marple()
+                    self.stop_marple(forced=False)
                     self.start_marple()
                 else:
                     self.printin("mamba environment marple-env not found.")
@@ -329,21 +348,16 @@ class App(ctk.CTk):
             self.printin(f"Failed to start Snakemake: {e}")
 
     def capture_output(self, stream):
-        if not hasattr(self, 'output_text'):
-            # Create output_text if it doesn't exist
-            self.output_text = ctk.CTkTextbox(self, width=600, height=400)
-            self.output_text.pack(pady=(20, 20))
-            self.output_text.configure(state="disabled")
-        
-        # Display real-time output in the output_text widget
+        # Append captured output to the output_lines
         for line in iter(stream.readline, ''):
+            self.output_lines.append(line)  # Store captured output
             self.output_text.configure(state="normal")
             self.output_text.insert("end", line)
             self.output_text.see("end")
             self.output_text.configure(state="disabled")
         stream.close()
 
-    def stop_marple(self):
+    def stop_marple(self, forced=True):
         # Stop the Snakemake process if running
         if self.snakemake_process and self.snakemake_process.poll() is None:
             self.snakemake_process.terminate()
@@ -373,6 +387,10 @@ class App(ctk.CTk):
             self.printin(f"Error terminating FastTree: {e}")
         
         self.unlock_snakemake()
+        
+        if forced:
+            self.output_text.pack_forget()
+
 
     def unlock_snakemake(self):
         try:
