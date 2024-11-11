@@ -21,7 +21,7 @@ class App(ctk.CTk):
         self.marpledir = os.path.join(os.path.join(Path.home(), 'marple'))
         self.marpleguidir = os.path.join(os.path.join(Path.home(), 'marple-gui-dev'))
         
-        self.geometry("600x920")
+        self.geometry("920x1020")
         self.title("MARPLE")
         self.attributes('-alpha', 0.95)
         
@@ -35,7 +35,7 @@ class App(ctk.CTk):
         # Hold output lines
         self.output_lines = []
         ## Output text initialization
-        self.output_text = ctk.CTkTextbox(self, width=600, height=400)
+        self.output_text = ctk.CTkTextbox(self, width=600, height=500)
         self.output_text.configure(state="disabled")
         
         logo_path = os.path.join(self.marpleguidir, "MARPLE_logo.png")
@@ -45,7 +45,7 @@ class App(ctk.CTk):
             print(f"Error loading image: {e}")
             logo_image = None
         
-        self.logo_label = ctk.CTkLabel(self, image=logo_image, text="")#, bg_color=self.colswitch)
+        self.logo_label = ctk.CTkLabel(self, image=logo_image, text="")
         self.logo_label.pack(pady=(20, 10))
 
         # Menu
@@ -74,16 +74,11 @@ class App(ctk.CTk):
         self.stop_button.pack(pady=(10, 20))
         self.snakemake_process = None
 
-        # Track tranfer status
         self.transfer_in_progress = False
-    
-        # Placeholder for dynamic content
         self.dynamic_frame = None
 
-        # Progress bar
         self.progress_bar = ctk.CTkProgressBar(self, orientation="horizontal")
         
-        # Notification frame
         self.notification_frame = ctk.CTkFrame(self, bg_color=self.colswitch)
 
     def update_mode(self):
@@ -105,14 +100,14 @@ class App(ctk.CTk):
         self.clear_dynamic_frame()
         self.run_marple_button.pack(pady=(30, 30))
         self.stop_button.pack(pady=(10, 20))
-        self.output_text.pack(pady=(20, 20))
+        # self.output_text.pack(pady=(20, 20))
 
     def show_transfer_reads(self):
         self.clear_dynamic_frame()
         self.dynamic_frame = ctk.CTkFrame(self, bg_color=self.colswitch)
         self.dynamic_frame.pack(fill="both", expand=True, pady=20)
 
-        # Transfer reads options
+        # Transfer reads options (buttons already centered)
         self.select_dir_button = ctk.CTkButton(self.dynamic_frame, command=self.select_experiment, text="Select MinKNOW Directory", corner_radius=1, font=self.font)
         self.select_dir_button.pack(pady=(20, 10))
 
@@ -125,78 +120,125 @@ class App(ctk.CTk):
         self.transfer_reads_button = ctk.CTkButton(self.dynamic_frame, command=self.transfer_reads, text="Transfer Reads", corner_radius=1, font=self.large_font)
         self.transfer_reads_button.pack(pady=(10, 20))
 
-        # Create a frame with a scrollbar
-        self.canvas = ctk.CTkCanvas(self.dynamic_frame, bg=self.colswitch, width=300,height=100)
-        self.scrollbar = ttk.Scrollbar(self.dynamic_frame, orient="vertical", command=self.canvas.yview)
+        # Frame to contain canvas and scrollbar
+        self.canvas_frame = ctk.CTkFrame(self.dynamic_frame, bg_color=self.colswitch)
+        self.canvas_frame.pack(fill="none", expand=False, padx=(5, 0), pady=5)
+
+        self.canvas = ctk.CTkCanvas(self.canvas_frame, bg=self.colswitch, width=820, height=375)
+        self.v_scrollbar = ttk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = ctk.CTkFrame(self.canvas, bg_color=self.colswitch, corner_radius=1)
 
-        # Configure the canvas and scrollbar
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.configure(yscrollcommand=self.v_scrollbar.set)
 
-        # Check if there are barcode rows
-        if self.has_barcode_rows():
-            self.canvas.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=20)
-            self.scrollbar.pack(side="right", fill="y")
-
-    def has_barcode_rows(self):
-        return len(self.barcode_rows) > 0
+        self.canvas.pack(side="left", fill="none", expand=True)
+        self.v_scrollbar.pack(side="right", fill="y")
+        
+        if not self.has_barcode_rows():
+            self.canvas.pack_forget()
+            self.canvas_frame.pack_forget()
+            self.v_scrollbar.pack_forget()
 
     def add_barcode_row(self):
-        row = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
-        row.pack(fill="x", padx=5, pady=2)
-        # row.grid_columnconfigure(0, weight=1)
+        # Create a row container for each set of fields
+        row_container = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
+        row_container.pack(fill="x", anchor="center", padx=5, pady=(50,0))
 
-        barcode_label = ctk.CTkLabel(row, text="Barcode:", font=self.font)
+        # Barcode and Sample Row
+        barcode_label = ctk.CTkLabel(row_container, text="Barcode:", font=self.font)
         barcode_label.pack(side="left", padx=5)
 
-        barcode_entry = ctk.CTkEntry(row, width=60, corner_radius=1, font=self.font)
+        barcode_entry = ctk.CTkEntry(row_container, width=60, corner_radius=1, font=self.font)
         barcode_entry.pack(side="left", padx=5)
 
-        sample_label = ctk.CTkLabel(row, text="Sample Name:", font=self.font)
+        sample_label = ctk.CTkLabel(row_container, text="Sample Name:", font=self.font)
         sample_label.pack(side="left", padx=5)
 
-        sample_entry = ctk.CTkEntry(row, width=200, corner_radius=1, font=self.font)
+        sample_entry = ctk.CTkEntry(row_container, width=300, corner_radius=1, font=self.font)
         sample_entry.pack(side="left", padx=5)
 
-        # Add a segmented button for Pgt/Pst
-        segmented_button = ctk.CTkSegmentedButton(row, values=['Pgt', 'Pst'], command=lambda choice, row=row: self.on_segmented_button_click(choice, row), corner_radius=1, font=self.font)
-        segmented_button.set('Pgt')  # Default value
+        segmented_button = ctk.CTkSegmentedButton(row_container, values=['Pgt', 'Pst'], command=lambda choice, row=row_container: self.on_segmented_button_click(choice, row), corner_radius=1, font=self.font)
+        segmented_button.set('Pgt')
         segmented_button.pack(side="left", padx=(5, 10))
 
-        # Add a remove button
-        remove_button = ctk.CTkButton(row, text="Remove", command=lambda: self.remove_barcode_row(row), corner_radius=1, font=self.font)
+        # Metadata Row (new row below the barcode row)
+        metadata_container = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
+        metadata_container.pack(fill="x", anchor="center", padx=5, pady=2)
+
+        collection_date_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Collection Date", font=self.font, corner_radius=1)
+        collection_date_entry.pack(side="left", padx=2)
+
+        collector_name_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Collector's Name", font=self.font, corner_radius=1)
+        collector_name_entry.pack(side="left", padx=2)
+
+        location_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Location", font=self.font, corner_radius=1)
+        location_entry.pack(side="left", padx=2)
+
+        country_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Country", font=self.font, corner_radius=1)
+        country_entry.pack(side="left", padx=2)
+        
+        metadata_container2 = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
+        metadata_container2.pack(fill="x", anchor="center", padx=5, pady=2)
+
+        remove_button = ctk.CTkButton(row_container, text="Remove", command=lambda: self.remove_barcode_row(row_container, metadata_container, metadata_container2), corner_radius=1, font=self.font)
         remove_button.pack(side="left", padx=5)
+        
+        cultivar_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Cultivar", font=self.font, corner_radius=1)
+        cultivar_entry.pack(side="left", padx=2)
 
-        self.barcode_rows.append((barcode_entry, sample_entry, segmented_button))
+        treat_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Treatment", font=self.font, corner_radius=1)
+        treat_entry.pack(side="left", padx=2)
 
-        # Enable scrolling if more than 5 rows
-        if len(self.barcode_rows) > 5:
-            self.canvas.configure(height=5 * 40)
+        # Add row and metadata fields to barcode_rows for tracking
+        self.barcode_rows.append({
+            "barcode": barcode_entry,
+            "sample": sample_entry,
+            "transfer_type": segmented_button,
+            "collection_date": collection_date_entry,
+            "collector_name": collector_name_entry,
+            "location": location_entry,
+            "country": country_entry,
+            "cultivar": cultivar_entry,
+            "treatment": treat_entry,
+            "metadata_container": metadata_container,
+            "metadata_container2": metadata_container2
+        })
 
-        # Ensure the canvas and scrollbar are packed
-        if not self.canvas.winfo_ismapped():
-            self.canvas.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=20)
-            self.scrollbar.pack(side="right", fill="y")
+        # Update scrollable region
+        self.scrollable_frame.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-    def remove_barcode_row(self, row):
+        # Show scrollbar only if rows are present
+        if len(self.barcode_rows) > 0:
+            self.v_scrollbar.pack(side="right", fill="y")
+            self.canvas.pack(fill="none", expand=False, padx=(5, 0), pady=20)
+            self.canvas_frame.pack(fill="none", expand=False, padx=(5, 0), pady=5)
+
+    def remove_barcode_row(self, row, metadata_container, metadata_container2):
         # Remove the row from the barcode_rows list
-        for index, (barcode_entry, sample_entry, segmented_button) in enumerate(self.barcode_rows):
-            if barcode_entry == row.children['!ctkentry'] and sample_entry == row.children['!ctkentry2']:
+        for index, barcode_row in enumerate(self.barcode_rows):
+            if barcode_row["barcode"] == row.children['!ctkentry'] and barcode_row["sample"] == row.children['!ctkentry2']:
                 del self.barcode_rows[index]
                 break
         
-        # Destroy the row widget
+        # Destroy the row widget and metadata container
         row.destroy()
+        metadata_container.destroy()
+        metadata_container2.destroy()
 
         # Update the canvas and scrollbar if necessary
-        if len(self.barcode_rows) <= 5:
-            self.canvas.configure(height=len(self.barcode_rows) * 40)
+        self.scrollable_frame.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
         if not self.has_barcode_rows():
             self.canvas.pack_forget()
-            self.scrollbar.pack_forget()
-
+            self.canvas_frame.pack_forget()
+            self.v_scrollbar.pack_forget()
+    
+    def has_barcode_rows(self):
+        return len(self.barcode_rows) > 0
+    
     def show_about(self):
         self.clear_dynamic_frame()
         self.dynamic_frame = ctk.CTkFrame(self, bg_color=self.colswitch)
@@ -229,6 +271,15 @@ class App(ctk.CTk):
             self.printin("MinKNOW directory not selected.")
             return
 
+        for row in self.barcode_rows:
+            if any(not field.get().strip() for field in [
+                row["barcode"], row["sample"], row["collection_date"],
+                row["collector_name"], row["location"], row["country"],
+                row["cultivar"]
+            ]):
+                self.printin("Please fill in all metadata fields before transferring reads.")
+                return
+
         # Check if a transfer is already in progress
         if self.transfer_in_progress:
             self.show_warning("Transfer Reads Process Running. Wait until it finishes.")
@@ -243,7 +294,7 @@ class App(ctk.CTk):
         # Run the task in a separate thread to avoid freezing the UI
         self.transfer_thread = threading.Thread(target=self.process_reads)
         self.transfer_thread.start()
-
+            
     def process_reads(self):
         try:
             total_barcodes = len(self.barcode_rows)
@@ -251,35 +302,59 @@ class App(ctk.CTk):
                 self.printin("No barcodes to process.")
                 return
 
-            for barcode_entry, sample_entry, segmented_button in self.barcode_rows:
+            # Read existing metadata
+            metadata_file = os.path.join(self.marpledir, 'sample_metadata.csv')
+            if not os.path.exists(metadata_file):
+                with open(metadata_file, 'w') as f:
+                    f.write('Experiment,Barcode,SampleName,Pathogen,CollectionDate,CollectorsName,Location,Country,Cultivar,Treatment\n')
+
+            existing_metadata = []
+            if os.path.exists(metadata_file):
+                with open(metadata_file, 'r') as f:
+                    existing_metadata = f.readlines()
+
+            for row in self.barcode_rows:
+                experiment = os.path.basename(self.minknow_dir)
+                barcode_entry = row["barcode"]
+                sample_entry = row["sample"]
+                segmented_button = row["transfer_type"]
+                meta_date = row["collection_date"]
+                meta_name = row["collector_name"]
+                meta_loc = row["location"]
+                meta_country = row["country"]
+                meta_cultivar = row["cultivar"]
+                meta_treat = row["treatment"]
+
                 barcode = format(int(barcode_entry.get().strip()), '02d')
                 sample = sample_entry.get().strip()
-                transfer_type = segmented_button.get()  # Get the transfer type from the segmented button
+                pathogen = segmented_button.get()  # Get the transfer type from the segmented button
 
                 if not barcode:
                     continue
+
+                # Check if the sample and pathogen already exist in the metadata
+                new_metadata_line = f"{experiment},{barcode},{sample},{pathogen},{meta_date.get().strip()},{meta_name.get().strip()},{meta_loc.get().strip()},{meta_country.get().strip()},{meta_cultivar.get().strip()},{meta_treat.get().strip()}\n"
+                existing_metadata = [line for line in existing_metadata if not (sample in line and pathogen in line)]
 
                 for root, dirs, files in os.walk(self.minknow_dir):
                     for dir in dirs:
                         if dir == 'pass':
                             barcode_dir = os.path.join(root, dir, f'barcode{barcode}')
                             try:
-                                output_file = os.path.join(self.marpledir, 'reads', transfer_type.lower(), f'{sample}.fastq.gz')
-                                # with gzip.open(output_file, 'wb') as fout:
-                                #     for file in os.listdir(barcode_dir):
-                                #         if file.endswith(".gz"):
-                                #             with gzip.open(os.path.join(barcode_dir, file), 'rb') as f:
-                                #                 reads = f.readlines()
-                                #                 fout.writelines(reads)
-                                #         elif file.endswith(".fastq"):
-                                #             with open(os.path.join(barcode_dir, file), 'rb') as f:
-                                #                 reads = f.readlines()
-                                #                 fout.writelines(reads)
+                                output_file = os.path.join(self.marpledir, 'reads', pathogen.lower(), f'{sample}.fastq.gz')
                                 command = f"cat {barcode_dir}/*.fastq.gz > {output_file}"
                                 subprocess.run(command, shell=True)
                                 self.printin(f"Successfully transferred reads for barcode{barcode} to {output_file}")
+
+                                existing_metadata.append(new_metadata_line)
+
                             except Exception as e:
                                 self.printin(f"An error occurred while processing barcode{barcode}: {e}")
+
+            # Write the updated metadata back to the file
+            with open(metadata_file, 'w') as f:
+                f.writelines(existing_metadata)
+
         finally:
             self.transfer_in_progress = False
             self.stop_progress_bar()
@@ -391,7 +466,6 @@ class App(ctk.CTk):
         if forced:
             self.output_text.pack_forget()
 
-
     def unlock_snakemake(self):
         try:
             subprocess.run(["mamba", "run", "-n", "marple-env", "snakemake", "--unlock"], cwd=self.marpledir)
@@ -419,12 +493,12 @@ class App(ctk.CTk):
                 self.printin("MARPLE run completed successfully.")
 
     def printin(self, stdout):
-        self.notification_frame.pack(side="bottom", fill="both", expand="True")
+        self.notification_frame.pack(side="top", fill="both", expand="True")
         for widget in self.notification_frame.winfo_children():
             widget.destroy()
         
         label = ctk.CTkLabel(self.notification_frame, text=stdout, bg_color=self.colswitch)
-        label.pack(side="bottom", fill="both", expand="True")
+        label.pack(side="top", fill="both", expand="True")
         
         self.after(5000, self.clear_notification)
     
