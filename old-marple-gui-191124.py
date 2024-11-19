@@ -151,28 +151,58 @@ class App(ctk.CTk):
 
         barcode_entry = ctk.CTkEntry(row_container, width=60, corner_radius=1, font=self.font)
         barcode_entry.pack(side="left", padx=5)
-        
-        # Dropdown menu for Sample Collection Barcode
-        dropdown_label = ctk.CTkLabel(row_container, text="Sample Collection Barcode:", font=self.font)
-        dropdown_label.pack(side="left", padx=5)
 
-        dropdown_var = tk.StringVar(value="Recorded In-Field")
-        dropdown_menu = ctk.CTkOptionMenu(row_container, corner_radius=1, variable=dropdown_var, values=["Recorded In-Field", "Extracted from Live", "No Barcode"], command=lambda choice, row=self.scrollable_frame: self.on_dropdown_select(choice, row))
-        dropdown_menu.pack(side="left", padx=5)
+        sample_label = ctk.CTkLabel(row_container, text="Sample Name:", font=self.font)
+        sample_label.pack(side="left", padx=5)
+
+        sample_entry = ctk.CTkEntry(row_container, width=300, corner_radius=1, font=self.font)
+        sample_entry.pack(side="left", padx=5)
 
         segmented_button = ctk.CTkSegmentedButton(row_container, values=['Pgt', 'Pst'], command=lambda choice, row=row_container: self.on_segmented_button_click(choice, row), corner_radius=1, font=self.font)
         segmented_button.set('Pgt')
         segmented_button.pack(side="left", padx=(5, 10))
 
-        remove_button = ctk.CTkButton(row_container, text="Remove", command=lambda: self.remove_barcode_row(row_container), corner_radius=1, font=self.font)
+        # Metadata Row (new row below the barcode row)
+        metadata_container = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
+        metadata_container.pack(fill="x", anchor="center", padx=5, pady=2)
+
+        collection_date_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Collection Date", font=self.font, corner_radius=1)
+        collection_date_entry.pack(side="left", padx=2)
+
+        collector_name_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Collector's Name", font=self.font, corner_radius=1)
+        collector_name_entry.pack(side="left", padx=2)
+
+        location_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Location", font=self.font, corner_radius=1)
+        location_entry.pack(side="left", padx=2)
+
+        country_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Country", font=self.font, corner_radius=1)
+        country_entry.pack(side="left", padx=2)
+        
+        metadata_container2 = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
+        metadata_container2.pack(fill="x", anchor="center", padx=5, pady=2)
+
+        remove_button = ctk.CTkButton(row_container, text="Remove", command=lambda: self.remove_barcode_row(row_container, metadata_container, metadata_container2), corner_radius=1, font=self.font)
         remove_button.pack(side="left", padx=5)
+        
+        cultivar_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Cultivar", font=self.font, corner_radius=1)
+        cultivar_entry.pack(side="left", padx=2)
+
+        treat_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Treatment", font=self.font, corner_radius=1)
+        treat_entry.pack(side="left", padx=2)
 
         # Add row and metadata fields to barcode_rows for tracking
         self.barcode_rows.append({
             "barcode": barcode_entry,
+            "sample": sample_entry,
             "transfer_type": segmented_button,
-            "dropdown_var": dropdown_var,
-            "dropdown_menu": dropdown_menu
+            "collection_date": collection_date_entry,
+            "collector_name": collector_name_entry,
+            "location": location_entry,
+            "country": country_entry,
+            "cultivar": cultivar_entry,
+            "treatment": treat_entry,
+            "metadata_container": metadata_container,
+            "metadata_container2": metadata_container2
         })
 
         # Update scrollable region
@@ -185,139 +215,17 @@ class App(ctk.CTk):
             self.canvas.pack(fill="none", expand=False, padx=(5, 0), pady=20)
             self.canvas_frame.pack(fill="none", expand=False, padx=(5, 0), pady=5)
 
-    def clear_metadata_fields(self, row):
-        if hasattr(row, 'qr_code_label'):
-            row.qr_code_label.pack_forget()
-            row.qr_code_entry.pack_forget()
-            row.metadata_container.pack_forget()
-            del row.metadata_container
-            del row.qr_code_label
-            del row.qr_code_entry
-        if hasattr(row, 'barcode1_label'):
-            row.barcode1_label.pack_forget()
-            row.barcode1_entry.pack_forget()
-            row.barcode2_label.pack_forget()
-            row.barcode2_entry.pack_forget()
-            row.metadata_container.pack_forget()
-            del row.metadata_container
-            del row.barcode1_label
-            del row.barcode1_entry
-            del row.barcode2_label
-            del row.barcode2_entry
-        if hasattr(row, 'metadata_container'):
-            row.metadata_container.pack_forget()
-            del row.metadata_container
-            row.metadata_container2.pack_forget()
-            del row.metadata_container2
-
-    def on_dropdown_select(self, choice, row):
-        if choice == "Recorded In-Field":
-            self.show_qr_code_option(row)
-        elif choice == "Extracted from Live":
-            self.show_two_barcodes_option(row)
-        elif choice == "No Barcode":
-            self.show_no_barcode_option(row)
-
-    def show_qr_code_option(self, row):
-        self.clear_metadata_fields(row)
-        
-        # Metadata Row (new row below the barcode row)
-        metadata_container = ctk.CTkFrame(row, bg_color=self.colswitch, corner_radius=1)
-        metadata_container.pack(fill="x", anchor="center", padx=5, pady=2)
-        
-        # Add QR code scanning option
-        qr_code_label = ctk.CTkLabel(metadata_container, text="Scan QR Code:", font=self.font)
-        qr_code_label.pack(side="left", padx=5)
-
-        qr_code_entry = ctk.CTkEntry(metadata_container, width=200, corner_radius=1, font=self.font)
-        qr_code_entry.pack(side="left", padx=5)
-
-        row.qr_code_label = qr_code_label
-        row.qr_code_entry = qr_code_entry
-        
-        row.metadata_container = metadata_container
-
-    def show_two_barcodes_option(self, row):
-        self.clear_metadata_fields(row)
-        
-        # Metadata Row (new row below the barcode row)
-        metadata_container = ctk.CTkFrame(row, bg_color=self.colswitch, corner_radius=1)
-        metadata_container.pack(fill="x", anchor="center", padx=5, pady=2)
-        
-        barcode1_label = ctk.CTkLabel(metadata_container, text="Barcode 1:", font=self.font)
-        barcode1_label.pack(side="left", padx=5)
-
-        barcode1_entry = ctk.CTkEntry(metadata_container, width=60, corner_radius=1, font=self.font)
-        barcode1_entry.pack(side="left", padx=5)
-
-        barcode2_label = ctk.CTkLabel(metadata_container, text="Barcode 2:", font=self.font)
-        barcode2_label.pack(side="left", padx=5)
-
-        barcode2_entry = ctk.CTkEntry(metadata_container, width=60, corner_radius=1, font=self.font)
-        barcode2_entry.pack(side="left", padx=5)
-
-        row.barcode1_label = barcode1_label
-        row.barcode1_entry = barcode1_entry
-        row.barcode2_label = barcode2_label
-        row.barcode2_entry = barcode2_entry
-        row.metadata_container = metadata_container
-
-    def show_no_barcode_option(self, row):
-        self.clear_metadata_fields(row)
-
-        # Metadata Row (new row below the barcode row)
-        metadata_container = ctk.CTkFrame(row, bg_color=self.colswitch, corner_radius=1)
-        metadata_container.pack(fill="x", anchor="center", padx=5, pady=2)
-
-        sample_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Sample Name", corner_radius=1, font=self.font)
-        sample_entry.pack(side="left", padx=2)
-
-        collection_date_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Collection Date", font=self.font, corner_radius=1)
-        collection_date_entry.pack(side="left", padx=2)
-
-        location_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Location", font=self.font, corner_radius=1)
-        location_entry.pack(side="left", padx=2)
-
-        country_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Country", font=self.font, corner_radius=1)
-        country_entry.pack(side="left", padx=2)
-        
-        metadata_container2 = ctk.CTkFrame(row, bg_color=self.colswitch, corner_radius=1)
-        metadata_container2.pack(fill="x", anchor="center", padx=5, pady=2)
-        
-        collector_name_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Collector's Name", font=self.font, corner_radius=1)
-        collector_name_entry.pack(side="left", padx=2)
-        
-        cultivar_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Cultivar", font=self.font, corner_radius=1)
-        cultivar_entry.pack(side="left", padx=2)
-
-        treat_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Treatment", font=self.font, corner_radius=1)
-        treat_entry.pack(side="left", padx=2)
-        
-        row.metadata_container = metadata_container
-        row.metadata_container2 = metadata_container2
-        
-        self.barcode_rows.extend({
-            "sample": sample_entry,
-            "collection_date": collection_date_entry,
-            "collector_name": collector_name_entry,
-            "location": location_entry,
-            "country": country_entry,
-            "cultivar": cultivar_entry,
-            "treatment": treat_entry,
-            "metadata_container": metadata_container,
-            "metadata_container2": metadata_container2,  
-        })
-
-    def remove_barcode_row(self, row):
+    def remove_barcode_row(self, row, metadata_container, metadata_container2):
         # Remove the row from the barcode_rows list
         for index, barcode_row in enumerate(self.barcode_rows):
-            if barcode_row["barcode"] == row.children['!ctkentry']:
+            if barcode_row["barcode"] == row.children['!ctkentry'] and barcode_row["sample"] == row.children['!ctkentry2']:
                 del self.barcode_rows[index]
                 break
         
         # Destroy the row widget and metadata container
         row.destroy()
-        self.clear_metadata_fields(self.scrollable_frame)
+        metadata_container.destroy()
+        metadata_container2.destroy()
 
         # Update the canvas and scrollbar if necessary
         self.scrollable_frame.update_idletasks()
