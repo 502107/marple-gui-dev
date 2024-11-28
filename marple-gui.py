@@ -331,9 +331,10 @@ class App(ctk.CTk):
 
     def on_segmented_button_click(self, choice, row):
         # Find the index of the row to update
-        index = self.barcode_rows.index(next(item for item in self.barcode_rows if item[0] == row))
-        # Update the transfer type for that specific row
-        self.barcode_rows[index] = (self.barcode_rows[index][0], self.barcode_rows[index][1], choice)
+        index = next((index for index, item in enumerate(self.barcode_rows) if item["row_container"] == row), None)
+        if index is not None:
+            # Update the transfer type for that specific row
+            self.barcode_rows[index]["transfer_type"].set(choice)
 
     def select_experiment(self):
         self.minknow_default_dir = "/var/lib/minknow/data"
