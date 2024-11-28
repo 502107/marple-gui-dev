@@ -143,7 +143,7 @@ class App(ctk.CTk):
     def add_barcode_row(self):
         # Create a row container for each set of fields
         row_container = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
-        row_container.pack(fill="x", anchor="center", padx=5, pady=(50,0))
+        row_container.pack(fill="x", anchor="center", padx=5, pady=(15,0))
 
         # Barcode and Sample Row
         barcode_label = ctk.CTkLabel(row_container, text="Barcode:", font=self.font)
@@ -157,7 +157,7 @@ class App(ctk.CTk):
         dropdown_label.pack(side="left", padx=5)
 
         dropdown_var = tk.StringVar(value="Recorded In-Field")
-        dropdown_menu = ctk.CTkOptionMenu(row_container, corner_radius=1, variable=dropdown_var, values=["Recorded In-Field", "Extracted from Live", "No Barcode"], command=lambda choice, row=self.scrollable_frame: self.on_dropdown_select(choice, row))
+        dropdown_menu = ctk.CTkOptionMenu(row_container, corner_radius=1, variable=dropdown_var, values=["Recorded In-Field", "Extracted from Live", "No Barcode"], command=lambda choice, row=row_container: self.on_dropdown_select(choice, row))
         dropdown_menu.pack(side="left", padx=5)
 
         segmented_button = ctk.CTkSegmentedButton(row_container, values=['Pgt', 'Pst'], command=lambda choice, row=row_container: self.on_segmented_button_click(choice, row), corner_radius=1, font=self.font)
@@ -167,13 +167,22 @@ class App(ctk.CTk):
         remove_button = ctk.CTkButton(row_container, text="Remove", command=lambda: self.remove_barcode_row(row_container), corner_radius=1, font=self.font)
         remove_button.pack(side="left", padx=5)
 
+        # Metadata container for the dropdown selection
+        metadata_container = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
+        metadata_container.pack(fill="x", anchor="center", padx=5)
+
         # Add row and metadata fields to barcode_rows for tracking
         self.barcode_rows.append({
+            "row_container": row_container,
             "barcode": barcode_entry,
             "transfer_type": segmented_button,
             "dropdown_var": dropdown_var,
-            "dropdown_menu": dropdown_menu
+            "dropdown_menu": dropdown_menu,
+            "metadata_container": metadata_container
         })
+
+        # Show default option's fields by default
+        self.on_dropdown_select("Recorded In-Field", row_container)
 
         # Update scrollable region
         self.scrollable_frame.update_idletasks()
@@ -185,165 +194,140 @@ class App(ctk.CTk):
             self.canvas.pack(fill="none", expand=False, padx=(5, 0), pady=20)
             self.canvas_frame.pack(fill="none", expand=False, padx=(5, 0), pady=5)
 
-    def clear_metadata_fields(self, row):
-        if hasattr(row, 'qr_code_label'):
-            row.qr_code_label.pack_forget()
-            row.qr_code_entry.pack_forget()
-            row.metadata_container.pack_forget()
-            del row.metadata_container
-            del row.qr_code_label
-            del row.qr_code_entry
-        if hasattr(row, 'barcode1_label'):
-            row.barcode1_label.pack_forget()
-            row.barcode1_entry.pack_forget()
-            row.barcode2_label.pack_forget()
-            row.barcode2_entry.pack_forget()
-            row.metadata_container.pack_forget()
-            del row.metadata_container
-            del row.barcode1_label
-            del row.barcode1_entry
-            del row.barcode2_label
-            del row.barcode2_entry
-        if hasattr(row, 'metadata_container'):
-            row.metadata_container.pack_forget()
-            del row.metadata_container
-            row.metadata_container2.pack_forget()
-            del row.metadata_container2
-
     def on_dropdown_select(self, choice, row):
-        if choice == "Recorded In-Field":
-            self.show_qr_code_option(row)
-        elif choice == "Extracted from Live":
-            self.show_two_barcodes_option(row)
-        elif choice == "No Barcode":
-            self.show_no_barcode_option(row)
+        # Find the metadata container for the row
+        metadata_container = next(item["metadata_container"] for item in self.barcode_rows if item["row_container"] == row)
+        self.clear_metadata_fields(metadata_container)
+        for item in self.barcode_rows:
+            if item["row_container"] == row and "metadata_container2" in item:
+                item["metadata_container2"].destroy()
+                del item["metadata_container2"]
+                break
 
-    def show_qr_code_option(self, row):
-        self.clear_metadata_fields(row)
-        
-        # Metadata Row (new row below the barcode row)
-        metadata_container = ctk.CTkFrame(row, bg_color=self.colswitch, corner_radius=1)
-        metadata_container.pack(fill="x", anchor="center", padx=5, pady=2)
-        
+        if choice == "Recorded In-Field":
+            self.show_qr_code_option(metadata_container, row)
+        elif choice == "Extracted from Live":
+            self.show_two_barcodes_option(metadata_container, row)
+        elif choice == "No Barcode":
+            self.show_no_barcode_option(metadata_container, row)
+
+    def show_qr_code_option(self, container, row):
         # Add QR code scanning option
-        qr_code_label = ctk.CTkLabel(metadata_container, text="Scan QR Code:", font=self.font)
+        qr_code_label = ctk.CTkLabel(container, text="Scan MARPLE Barcode:", font=self.font)
         qr_code_label.pack(side="left", padx=5)
 
-        qr_code_entry = ctk.CTkEntry(metadata_container, width=200, corner_radius=1, font=self.font)
+        qr_code_entry = ctk.CTkEntry(container, width=200, corner_radius=1, font=self.font)
         qr_code_entry.pack(side="left", padx=5)
 
-        row.qr_code_label = qr_code_label
-        row.qr_code_entry = qr_code_entry
+        # Update the row's metadata fields
+        for item in self.barcode_rows:
+            if item["metadata_container"] == container:
+                item.update({
+                    "marple_barcode": qr_code_entry
+                })
+                break
+
+    def show_two_barcodes_option(self, container, row):
+        # Add two barcode entries
+        qrcode1_label = ctk.CTkLabel(container, text="ODK Barcode:", font=self.font)
+        qrcode1_label.pack(side="left", padx=5)
+
+        qrcode1_entry = ctk.CTkEntry(container, width=60, corner_radius=1, font=self.font)
+        qrcode1_entry.pack(side="left", padx=5)
+
+        qrcode2_label = ctk.CTkLabel(container, text="MARPLE Barcode:", font=self.font)
+        qrcode2_label.pack(side="left", padx=5)
+
+        qrcode2_entry = ctk.CTkEntry(container, width=60, corner_radius=1, font=self.font)
+        qrcode2_entry.pack(side="left", padx=5)
+
+        # Update the row's metadata fields
+        for item in self.barcode_rows:
+            if item["metadata_container"] == container:
+                item.update({
+                    "odk_barcode": qrcode1_entry,
+                    "marple_barcode": qrcode2_entry
+                })
+                break
+
+    def show_no_barcode_option(self, container, row):
+        # Add sample metadata entries
+        sample = ctk.CTkEntry(container, width=200, placeholder_text="Sample Name", corner_radius=1, font=self.font)
+        sample.pack(side="left", padx=2)
+
+        collection_date = ctk.CTkEntry(container, width=200, placeholder_text="Collection Date", font=self.font, corner_radius=1)
+        collection_date.pack(side="left", padx=2)
+
+        location = ctk.CTkEntry(container, width=200, placeholder_text="Location", font=self.font, corner_radius=1)
+        location.pack(side="left", padx=2)
+
+        country = ctk.CTkEntry(container, width=200, placeholder_text="Country", font=self.font, corner_radius=1)
+        country.pack(side="left", padx=2)
         
-        row.metadata_container = metadata_container
-
-    def show_two_barcodes_option(self, row):
-        self.clear_metadata_fields(row)
+        metadata_container2 = ctk.CTkFrame(self.scrollable_frame, bg_color=self.colswitch, corner_radius=1)
+        metadata_container2.pack(fill="x", anchor="center", padx=5)
         
-        # Metadata Row (new row below the barcode row)
-        metadata_container = ctk.CTkFrame(row, bg_color=self.colswitch, corner_radius=1)
-        metadata_container.pack(fill="x", anchor="center", padx=5, pady=2)
+        collector_name = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Collector's Name", font=self.font, corner_radius=1)
+        collector_name.pack(side="left", padx=2)
         
-        barcode1_label = ctk.CTkLabel(metadata_container, text="Barcode 1:", font=self.font)
-        barcode1_label.pack(side="left", padx=5)
+        cultivar = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Cultivar", font=self.font, corner_radius=1)
+        cultivar.pack(side="left", padx=2)
 
-        barcode1_entry = ctk.CTkEntry(metadata_container, width=60, corner_radius=1, font=self.font)
-        barcode1_entry.pack(side="left", padx=5)
-
-        barcode2_label = ctk.CTkLabel(metadata_container, text="Barcode 2:", font=self.font)
-        barcode2_label.pack(side="left", padx=5)
-
-        barcode2_entry = ctk.CTkEntry(metadata_container, width=60, corner_radius=1, font=self.font)
-        barcode2_entry.pack(side="left", padx=5)
-
-        row.barcode1_label = barcode1_label
-        row.barcode1_entry = barcode1_entry
-        row.barcode2_label = barcode2_label
-        row.barcode2_entry = barcode2_entry
-        row.metadata_container = metadata_container
-
-    def show_no_barcode_option(self, row):
-        self.clear_metadata_fields(row)
-
-        # Metadata Row (new row below the barcode row)
-        metadata_container = ctk.CTkFrame(row, bg_color=self.colswitch, corner_radius=1)
-        metadata_container.pack(fill="x", anchor="center", padx=5, pady=2)
-
-        sample_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Sample Name", corner_radius=1, font=self.font)
-        sample_entry.pack(side="left", padx=2)
-
-        collection_date_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Collection Date", font=self.font, corner_radius=1)
-        collection_date_entry.pack(side="left", padx=2)
-
-        location_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Location", font=self.font, corner_radius=1)
-        location_entry.pack(side="left", padx=2)
-
-        country_entry = ctk.CTkEntry(metadata_container, width=200, placeholder_text="Country", font=self.font, corner_radius=1)
-        country_entry.pack(side="left", padx=2)
+        treat = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Treatment", font=self.font, corner_radius=1)
+        treat.pack(side="left", padx=2)
         
-        metadata_container2 = ctk.CTkFrame(row, bg_color=self.colswitch, corner_radius=1)
-        metadata_container2.pack(fill="x", anchor="center", padx=5, pady=2)
-        
-        collector_name_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Collector's Name", font=self.font, corner_radius=1)
-        collector_name_entry.pack(side="left", padx=2)
-        
-        cultivar_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Cultivar", font=self.font, corner_radius=1)
-        cultivar_entry.pack(side="left", padx=2)
+        # Update the row's metadata fields
+        for item in self.barcode_rows:
+            if item["metadata_container"] == container:
+                item.update({
+                    "sample": sample,
+                    "collection_date": collection_date,
+                    "location": location,
+                    "country": country,
+                    "metadata_container2": metadata_container2,
+                    "collector_name": collector_name,
+                    "cultivar": cultivar,
+                    "treat": treat
+                })
+                break
 
-        treat_entry = ctk.CTkEntry(metadata_container2, width=200, placeholder_text="Treatment", font=self.font, corner_radius=1)
-        treat_entry.pack(side="left", padx=2)
-        
-        row.metadata_container = metadata_container
-        row.metadata_container2 = metadata_container2
-        
-        self.barcode_rows.extend({
-            "sample": sample_entry,
-            "collection_date": collection_date_entry,
-            "collector_name": collector_name_entry,
-            "location": location_entry,
-            "country": country_entry,
-            "cultivar": cultivar_entry,
-            "treatment": treat_entry,
-            "metadata_container": metadata_container,
-            "metadata_container2": metadata_container2,  
-        })
+    def clear_metadata_fields(self, container):
+        for widget in container.winfo_children():
+            widget.pack_forget()            
 
     def remove_barcode_row(self, row):
-        # Remove the row from the barcode_rows list
+        # Find the index of the row to remove
+        index_to_remove = None
         for index, barcode_row in enumerate(self.barcode_rows):
-            if barcode_row["barcode"] == row.children['!ctkentry']:
-                del self.barcode_rows[index]
+            if barcode_row["row_container"] == row:
+                index_to_remove = index
                 break
-        
-        # Destroy the row widget and metadata container
-        row.destroy()
-        self.clear_metadata_fields(self.scrollable_frame)
 
-        # Update the canvas and scrollbar if necessary
-        self.scrollable_frame.update_idletasks()
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        if index_to_remove is not None:
+            # Remove the row from the barcode_rows list
+            del self.barcode_rows[index_to_remove]
 
-        if not self.has_barcode_rows():
-            self.canvas.pack_forget()
-            self.canvas_frame.pack_forget()
-            self.v_scrollbar.pack_forget()
+            # Destroy the row widget and metadata container
+            row.destroy()
+            metadata_container = barcode_row["metadata_container"]
+            self.clear_metadata_fields(metadata_container)
+            metadata_container.destroy()
+
+            # Remove metadata_container2 if it exists
+            if "metadata_container2" in barcode_row:
+                barcode_row["metadata_container2"].destroy()
+
+            # Update the canvas and scrollbar if necessary
+            self.scrollable_frame.update_idletasks()
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+            if not self.has_barcode_rows():
+                self.canvas.pack_forget()
+                self.canvas_frame.pack_forget()
+                self.v_scrollbar.pack_forget()
     
     def has_barcode_rows(self):
         return len(self.barcode_rows) > 0
-    
-    def show_about(self):
-        self.clear_dynamic_frame()
-        self.dynamic_frame = ctk.CTkFrame(self, bg_color=self.colswitch)
-        self.dynamic_frame.pack(fill="both", expand=True, pady=20)
-
-        about_label = ctk.CTkLabel(self.dynamic_frame, text="MARPLE Diagnostics:\npoint-of-care, strain-level disease diagnostics and\nsurveillance tool for complex fungal pathogens\n\nVersion: 2.0-alpha", font=self.large_font)
-        about_label.pack(pady=(20, 20))
-
-        # devs_label = ctk.CTkLabel(self.dynamic_frame, text="Software and Legacy Code Developers:\nLoizos Savva\nAnthony Bryan\nGuru V. Radhakrishnan")
-        # devs_label.pack(pady=(20, 20))
-        
-        copyright_label = ctk.CTkLabel(self.dynamic_frame, text="© 2024 Saunders Lab")
-        copyright_label.pack()
 
     def on_segmented_button_click(self, choice, row):
         # Find the index of the row to update
@@ -364,14 +348,23 @@ class App(ctk.CTk):
             return
 
         for row in self.barcode_rows:
-            if any(not field.get().strip() for field in [
-                row["barcode"], row["sample"], row["collection_date"],
-                row["collector_name"], row["location"], row["country"],
-                row["cultivar"]
-            ]):
-                self.printin("Please fill in all metadata fields before transferring reads.")
-                return
+            # Check for each field depending on dropdown selection
+            if row["dropdown_var"].get() == "Recorded In-Field":
+                if not row.get("marple_barcode") or not row["marple_barcode"].get().strip().startswith("M"):
+                    self.printin("Please scan a valid QR code.")
+                    return
 
+            elif row["dropdown_var"].get() == "Extracted from Live":
+                if not row.get("odk_barcode") or not row["marple_barcode"].get().strip().startswith("M"):
+                    self.printin("Please scan valid QR codes.")
+                    return
+
+            elif row["dropdown_var"].get() == "No Barcode":
+                if any(not field.get().strip() for field in [
+                    row["sample"], row["collection_date"], row["location"],
+                    row["country"], row["collector_name"], row["cultivar"]]):
+                    self.printin("Please fill in all metadata fields.")
+                
         # Check if a transfer is already in progress
         if self.transfer_in_progress:
             self.show_warning("Transfer Reads Process Running. Wait until it finishes.")
@@ -408,24 +401,24 @@ class App(ctk.CTk):
             for row in self.barcode_rows:
                 experiment = os.path.basename(self.minknow_dir)
                 barcode_entry = row["barcode"]
-                sample_entry = row["sample"]
+                sample_entry = row.get("sample") or row.get("marple_barcode")
                 segmented_button = row["transfer_type"]
-                meta_date = row["collection_date"]
-                meta_name = row["collector_name"]
-                meta_loc = row["location"]
-                meta_country = row["country"]
-                meta_cultivar = row["cultivar"]
-                meta_treat = row["treatment"]
+                meta_date = row.get("collection_date")
+                meta_name = row.get("collector_name")
+                meta_loc = row.get("location")
+                meta_country = row.get("country")
+                meta_cultivar = row.get("cultivar")
+                meta_treat = row.get("treat")
 
                 barcode = format(int(barcode_entry.get().strip()), '02d')
-                sample = sample_entry.get().strip()
+                sample = sample_entry.get().strip() if sample_entry else ""
                 pathogen = segmented_button.get()  # Get the transfer type from the segmented button
 
                 if not barcode:
                     continue
 
                 # Check if the sample and pathogen already exist in the metadata
-                new_metadata_line = f"{experiment},{barcode},{sample},{pathogen},{meta_date.get().strip()},{meta_name.get().strip()},{meta_loc.get().strip()},{meta_country.get().strip()},{meta_cultivar.get().strip()},{meta_treat.get().strip()}\n"
+                new_metadata_line = f"{experiment},{barcode},{sample},{pathogen},{meta_date.get().strip() if meta_date else ''},{meta_name.get().strip() if meta_name else ''},{meta_loc.get().strip() if meta_loc else ''},{meta_country.get().strip() if meta_country else ''},{meta_cultivar.get().strip() if meta_cultivar else ''},{meta_treat.get().strip() if meta_treat else ''}\n"
                 existing_metadata = [line for line in existing_metadata if not (sample in line and pathogen in line)]
 
                 for root, dirs, files in os.walk(self.minknow_dir):
@@ -450,6 +443,20 @@ class App(ctk.CTk):
         finally:
             self.transfer_in_progress = False
             self.stop_progress_bar()
+    
+    def show_about(self):
+        self.clear_dynamic_frame()
+        self.dynamic_frame = ctk.CTkFrame(self, bg_color=self.colswitch)
+        self.dynamic_frame.pack(fill="both", expand=True, pady=20)
+
+        about_label = ctk.CTkLabel(self.dynamic_frame, text="MARPLE Diagnostics:\npoint-of-care, strain-level disease diagnostics and\nsurveillance tool for complex fungal pathogens\n\nVersion: 2.0-alpha", font=self.large_font)
+        about_label.pack(pady=(20, 20))
+
+        # devs_label = ctk.CTkLabel(self.dynamic_frame, text="Software and Legacy Code Developers:\nLoizos Savva\nAnthony Bryan\nGuru V. Radhakrishnan")
+        # devs_label.pack(pady=(20, 20))
+        
+        copyright_label = ctk.CTkLabel(self.dynamic_frame, text="© 2024 Saunders Lab")
+        copyright_label.pack()
 
     def stop_progress_bar(self):
         self.progress_bar.stop()
