@@ -231,15 +231,14 @@ class App(ctk.CTk):
             if not ret:
                 self.printin("Error: Failed to capture image.")
                 break
-                
+
             barcodes = pyzbar.decode(frame)
 
             for barcode in barcodes:
                 barcode_data = barcode.data.decode("utf-8")
-                # Only stop scanning if a valid barcode is found and meets condition
                 if marple_barcode and barcode_data.startswith("M"):
                     self.printin(f"MARPLE Barcode detected: {barcode_data}")
-                    self.scanner_running = False  # Stop the scanner
+                    self.scanner_running = False
                     break
                 elif marple_barcode and not barcode_data.startswith("M"):
                     self.printin("Invalid barcode. Please scan a MARPLE barcode.")
@@ -250,8 +249,7 @@ class App(ctk.CTk):
                     break
 
             cv2.imshow("Scan Barcode", frame)
-            
-            # Exit condition (press 'q' to quit the scanner)
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 self.scanner_running = False
                 break
@@ -260,31 +258,29 @@ class App(ctk.CTk):
         cv2.destroyAllWindows()
         return barcode_data
 
+    def toggle_scanner(self, container):
+        self.run_scanner(container)
+
+    def run_scanner(self, container):
+        with self.lock:
+            self.scanner_running = True
+        barcode_data = self.scan_barcode_cam(marple_barcode=True)
+        if barcode_data:
+            self.after(0, self.update_entry, container, barcode_data)
+        with self.lock:
+            self.scanner_running = False
+
+    def update_entry(self, container, barcode_data):
+        with self.lock:
+            for item in self.barcode_rows:
+                if item["metadata_container"] == container:
+                    item.update({
+                        "marple_barcode": barcode_data
+                    })
+                    break
+
     def scan_barcode_option(self, container, row):
-        def toggle_scanner():
-            def run_scanner():
-                with self.lock:
-                    self.scanner_running = True
-                barcode_data = self.scan_barcode_cam(marple_barcode=True)
-                if barcode_data:
-                    self.after(0, update_entry, barcode_data)
-                self.scanner_running = False
-
-            def update_entry(barcode_data):
-                with self.lock:
-                    for item in self.barcode_rows:
-                        if item["metadata_container"] == container:
-                            item.update({
-                                "marple_barcode": barcode_data
-                            })
-                            break
-
-            if not self.scanner_running:  # Prevent multiple threads from being started
-                scanner_thread = threading.Thread(target=run_scanner)
-                scanner_thread.start()
-
-        # Add code scanning option
-        barcode_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=toggle_scanner, corner_radius=1)
+        barcode_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=lambda: self.toggle_scanner(container), corner_radius=1)
         barcode_label.pack(side="left", padx=5)
 
     def scan_two_barcodes_option(self, container, row):
