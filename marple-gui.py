@@ -1,4 +1,5 @@
 import os
+import cv2
 import shlex
 import psutil
 import shutil
@@ -7,6 +8,7 @@ import subprocess
 import tkinter as tk
 from PIL import Image
 from pathlib import Path
+from pyzbar import pyzbar
 import customtkinter as ctk
 from tkinter import Menu, filedialog, ttk
 
@@ -31,6 +33,10 @@ class App(ctk.CTk):
         self.barcode_rows = []
         self.transfer_type = 'Pgt'
         self.minknow_dir = ""
+        
+        # Barcode scanner variables
+        self.scanner_running = False
+        self.lock = threading.Lock()
         
         # Hold output lines
         self.output_lines = []
@@ -205,29 +211,83 @@ class App(ctk.CTk):
                 break
 
         if choice == "Recorded In-Field":
-            self.show_qr_code_option(metadata_container, row)
+            self.scan_barcode_option(metadata_container, row)
         elif choice == "Extracted from Live":
-            self.show_two_barcodes_option(metadata_container, row)
+            self.scan_two_barcodes_option(metadata_container, row)
         elif choice == "No Barcode":
             self.show_no_barcode_option(metadata_container, row)
+            
+    def scan_barcode_cam(self, marple_barcode=False):
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            self.printin("Error: Could not open camera.")
+            return None
 
-    def show_qr_code_option(self, container, row):
-        # Add QR code scanning option
-        qr_code_label = ctk.CTkLabel(container, text="Scan MARPLE Barcode:", font=self.font)
-        qr_code_label.pack(side="left", padx=5)
+        barcode_data = None
+        self.scanner_running = True
 
-        qr_code_entry = ctk.CTkEntry(container, width=200, corner_radius=1, font=self.font)
-        qr_code_entry.pack(side="left", padx=5)
+        while self.scanner_running:
+            ret, frame = cap.read()
+            if not ret:
+                self.printin("Error: Failed to capture image.")
+                break
+                
+            barcodes = pyzbar.decode(frame)
 
-        # Update the row's metadata fields
-        for item in self.barcode_rows:
-            if item["metadata_container"] == container:
-                item.update({
-                    "marple_barcode": qr_code_entry
-                })
+            for barcode in barcodes:
+                barcode_data = barcode.data.decode("utf-8")
+                # Only stop scanning if a valid barcode is found and meets condition
+                if marple_barcode and barcode_data.startswith("M"):
+                    self.printin(f"MARPLE Barcode detected: {barcode_data}")
+                    self.scanner_running = False  # Stop the scanner
+                    break
+                elif marple_barcode and not barcode_data.startswith("M"):
+                    self.printin("Invalid barcode. Please scan a MARPLE barcode.")
+                    continue
+                else:
+                    self.printin(f"Barcode detected: {barcode_data}")
+                    self.scanner_running = False
+                    break
+
+            cv2.imshow("Scan Barcode", frame)
+            
+            # Exit condition (press 'q' to quit the scanner)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                self.scanner_running = False
                 break
 
-    def show_two_barcodes_option(self, container, row):
+        cap.release()
+        cv2.destroyAllWindows()
+        return barcode_data
+
+    def scan_barcode_option(self, container, row):
+        def toggle_scanner():
+            def run_scanner():
+                with self.lock:
+                    self.scanner_running = True
+                barcode_data = self.scan_barcode_cam(marple_barcode=True)
+                if barcode_data:
+                    self.after(0, update_entry, barcode_data)
+                self.scanner_running = False
+
+            def update_entry(barcode_data):
+                with self.lock:
+                    for item in self.barcode_rows:
+                        if item["metadata_container"] == container:
+                            item.update({
+                                "marple_barcode": barcode_data
+                            })
+                            break
+
+            if not self.scanner_running:  # Prevent multiple threads from being started
+                scanner_thread = threading.Thread(target=run_scanner)
+                scanner_thread.start()
+
+        # Add code scanning option
+        barcode_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=toggle_scanner, corner_radius=1)
+        barcode_label.pack(side="left", padx=5)
+
+    def scan_two_barcodes_option(self, container, row):
         # Add two barcode entries
         qrcode1_label = ctk.CTkLabel(container, text="ODK Barcode:", font=self.font)
         qrcode1_label.pack(side="left", padx=5)
@@ -351,12 +411,15 @@ class App(ctk.CTk):
         for row in self.barcode_rows:
             # Check for each field depending on dropdown selection
             if row["dropdown_var"].get() == "Recorded In-Field":
-                if not row.get("marple_barcode") or not row["marple_barcode"].get().strip().startswith("M"):
+                marple_barcode = row.get("marple_barcode")
+                if not marple_barcode or not marple_barcode.strip().startswith("M"):
                     self.printin("Please scan a valid QR code.")
                     return
 
             elif row["dropdown_var"].get() == "Extracted from Live":
-                if not row.get("odk_barcode") or not row["marple_barcode"].get().strip().startswith("M"):
+                odk_barcode = row.get("odk_barcode")
+                marple_barcode = row.get("marple_barcode")
+                if not odk_barcode or not marple_barcode or not marple_barcode.strip().startswith("M"):
                     self.printin("Please scan valid QR codes.")
                     return
 
@@ -365,7 +428,7 @@ class App(ctk.CTk):
                     row["sample"], row["collection_date"], row["location"],
                     row["country"], row["collector_name"], row["cultivar"]]):
                     self.printin("Please fill in all metadata fields.")
-                
+                    
         # Check if a transfer is already in progress
         if self.transfer_in_progress:
             self.show_warning("Transfer Reads Process Running. Wait until it finishes.")
@@ -412,7 +475,7 @@ class App(ctk.CTk):
                 meta_treat = row.get("treat")
 
                 barcode = format(int(barcode_entry.get().strip()), '02d')
-                sample = sample_entry.get().strip() if sample_entry else ""
+                sample = sample_entry.strip() if sample_entry else ""
                 pathogen = segmented_button.get()  # Get the transfer type from the segmented button
 
                 if not barcode:
@@ -453,7 +516,7 @@ class App(ctk.CTk):
         about_label = ctk.CTkLabel(self.dynamic_frame, text="MARPLE Diagnostics:\npoint-of-care, strain-level disease diagnostics and\nsurveillance tool for complex fungal pathogens\n\nVersion: 2.0-alpha", font=self.large_font)
         about_label.pack(pady=(20, 20))
 
-        # devs_label = ctk.CTkLabel(self.dynamic_frame, text="Software and Legacy Code Developers:\nLoizos Savva\nAnthony Bryan\nGuru V. Radhakrishnan")
+        # devs_label = ctk.CTkLabel(self.dynamic_frame, text="Software Development:\nLoizos Savva")
         # devs_label.pack(pady=(20, 20))
         
         copyright_label = ctk.CTkLabel(self.dynamic_frame, text="© 2024 Saunders Lab")
