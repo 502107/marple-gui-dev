@@ -242,7 +242,11 @@ class App(ctk.CTk):
                     break
                 elif marple_barcode and not barcode_data.startswith("M"):
                     self.printin("Invalid barcode. Please scan a MARPLE barcode.")
-                    continue
+                    # I used to be able to just continue scanning until a valid barcode was detected
+                    # but now it seems to be stuck in an infinite loop if an invalid barcode is scanned
+                    # so I'm breaking out of the loop and returning None
+                    self.scanner_running = False
+                    break
                 else:
                     self.printin(f"Barcode detected: {barcode_data}")
                     self.scanner_running = False
@@ -250,7 +254,7 @@ class App(ctk.CTk):
 
             cv2.imshow("Scan Barcode", frame)
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if (cv2.waitKey(1) & 0xFF == ord('q')) or (cv2.getWindowProperty("Scan Barcode",cv2.WND_PROP_VISIBLE) < 1):
                 self.scanner_running = False
                 break
 
@@ -258,53 +262,50 @@ class App(ctk.CTk):
         cv2.destroyAllWindows()
         return barcode_data
 
-    def toggle_scanner(self, container):
-        self.run_scanner(container)
+    def toggle_scanner(self, container, marple_toggle=False):
+        self.run_scanner(container, marple_toggle)
 
-    def run_scanner(self, container):
+    def run_scanner(self, container, marple_toggle=False):
         with self.lock:
             self.scanner_running = True
-        barcode_data = self.scan_barcode_cam(marple_barcode=True)
-        if barcode_data:
-            self.after(0, self.update_entry, container, barcode_data)
+        if marple_toggle:
+            marple_barcode_data = self.scan_barcode_cam(marple_barcode=True)
+            self.after(0, self.update_marple_entry, container, marple_barcode_data)
+        elif not marple_toggle:
+            odk_barcode_data = self.scan_barcode_cam(marple_barcode=False)
+            self.after(0, self.update_odk_entry, container, odk_barcode_data)
         with self.lock:
             self.scanner_running = False
 
-    def update_entry(self, container, barcode_data):
+    def update_marple_entry(self, container, marple_barcode_data):
         with self.lock:
             for item in self.barcode_rows:
                 if item["metadata_container"] == container:
                     item.update({
-                        "marple_barcode": barcode_data
+                        "marple_barcode": marple_barcode_data
+                    })
+                    break
+
+    def update_odk_entry(self, container, odk_barcode_data):
+        with self.lock:
+            for item in self.barcode_rows:
+                if item["metadata_container"] == container:
+                    item.update({
+                        "odk_barcode": odk_barcode_data
                     })
                     break
 
     def scan_barcode_option(self, container, row):
-        barcode_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=lambda: self.toggle_scanner(container), corner_radius=1)
+        barcode_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=lambda: self.toggle_scanner(container, marple_toggle=True), corner_radius=1)
         barcode_label.pack(side="left", padx=5)
 
     def scan_two_barcodes_option(self, container, row):
         # Add two barcode entries
-        qrcode1_label = ctk.CTkLabel(container, text="ODK Barcode:", font=self.font)
+        qrcode1_label = ctk.CTkButton(container, text="Scan ODK Barcode", font=self.font, command=lambda: self.toggle_scanner(container, marple_toggle=False), corner_radius=1)
         qrcode1_label.pack(side="left", padx=5)
 
-        qrcode1_entry = ctk.CTkEntry(container, width=60, corner_radius=1, font=self.font)
-        qrcode1_entry.pack(side="left", padx=5)
-
-        qrcode2_label = ctk.CTkLabel(container, text="MARPLE Barcode:", font=self.font)
+        qrcode2_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=lambda: self.toggle_scanner(container, marple_toggle=True), corner_radius=1)
         qrcode2_label.pack(side="left", padx=5)
-
-        qrcode2_entry = ctk.CTkEntry(container, width=60, corner_radius=1, font=self.font)
-        qrcode2_entry.pack(side="left", padx=5)
-
-        # Update the row's metadata fields
-        for item in self.barcode_rows:
-            if item["metadata_container"] == container:
-                item.update({
-                    "odk_barcode": qrcode1_entry,
-                    "marple_barcode": qrcode2_entry
-                })
-                break
 
     def show_no_barcode_option(self, container, row):
         # Add sample metadata entries
@@ -451,7 +452,7 @@ class App(ctk.CTk):
             metadata_file = os.path.join(self.marpledir, 'sample_metadata.csv')
             if not os.path.exists(metadata_file):
                 with open(metadata_file, 'w') as f:
-                    f.write('Experiment,Barcode,SampleName,Pathogen,CollectionDate,CollectorsName,Location,Country,Cultivar,Treatment\n')
+                    f.write('Experiment,Barcode,SampleName,Pathogen,CollectionDate,CollectorsName,Location,Country,Cultivar,Treatment,ODKcode\n')
 
             existing_metadata = []
             if os.path.exists(metadata_file):
@@ -469,32 +470,39 @@ class App(ctk.CTk):
                 meta_country = row.get("country")
                 meta_cultivar = row.get("cultivar")
                 meta_treat = row.get("treat")
+                meta_odk = row.get("odk_barcode")
 
                 barcode = format(int(barcode_entry.get().strip()), '02d')
-                sample = sample_entry.strip() if sample_entry else ""
+                if hasattr(sample_entry, "strip"):
+                    sample = sample_entry.strip() if sample_entry else ""
+                else:
+                    sample = sample_entry.get() if sample_entry else ""
                 pathogen = segmented_button.get()  # Get the transfer type from the segmented button
 
                 if not barcode:
                     continue
 
                 # Check if the sample and pathogen already exist in the metadata
-                new_metadata_line = f"{experiment},{barcode},{sample},{pathogen},{meta_date.get().strip() if meta_date else ''},{meta_name.get().strip() if meta_name else ''},{meta_loc.get().strip() if meta_loc else ''},{meta_country.get().strip() if meta_country else ''},{meta_cultivar.get().strip() if meta_cultivar else ''},{meta_treat.get().strip() if meta_treat else ''}\n"
+                new_metadata_line = f"{experiment},{barcode},{sample},{pathogen},{meta_date.get().strip() if meta_date else ''},{meta_name.get().strip() if meta_name else ''},{meta_loc.get().strip() if meta_loc else ''},{meta_country.get().strip() if meta_country else ''},{meta_cultivar.get().strip() if meta_cultivar else ''},{meta_treat.get().strip() if meta_treat else ''},{meta_odk.strip() if meta_odk else ''}\n"
                 existing_metadata = [line for line in existing_metadata if not (sample in line and pathogen in line)]
 
                 for root, dirs, files in os.walk(self.minknow_dir):
                     for dir in dirs:
                         if dir == 'pass':
                             barcode_dir = os.path.join(root, dir, f'barcode{barcode}')
-                            try:
-                                output_file = os.path.join(self.marpledir, 'reads', pathogen.lower(), f'{sample}.fastq.gz')
-                                command = f"cat {barcode_dir}/*.fastq.gz > {output_file}"
-                                subprocess.run(command, shell=True)
-                                self.printin(f"Successfully transferred reads for barcode{barcode} to {output_file}")
+                            if os.path.exists(barcode_dir):
+                                try:
+                                    output_file = os.path.join(self.marpledir, 'reads', pathogen.lower(), f'{sample}.fastq.gz')
+                                    command = f"cat {barcode_dir}/*.fastq.gz > {output_file}"
+                                    subprocess.run(command, shell=True)
+                                    self.printin(f"Successfully transferred reads for barcode{barcode} to {output_file}")
 
-                                existing_metadata.append(new_metadata_line)
+                                    existing_metadata.append(new_metadata_line)
 
-                            except Exception as e:
-                                self.printin(f"An error occurred while processing barcode{barcode}: {e}")
+                                except Exception as e:
+                                    self.printin(f"An error occurred while processing barcode{barcode}: {e}")
+                            else:
+                                self.printin(f"Barcode{barcode} not found in MinKNOW directory.")
 
             # Write the updated metadata back to the file
             with open(metadata_file, 'w') as f:
