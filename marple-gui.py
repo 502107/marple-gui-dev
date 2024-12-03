@@ -262,11 +262,6 @@ class App(ctk.CTk):
         cv2.destroyAllWindows()
         return barcode_data
 
-        cap.release()
-        cv2.destroyAllWindows()
-        return barcode_data
-
-
     def toggle_scanner(self, container, row, marple_toggle=False):
         self.run_scanner(container, row, marple_toggle)
 
