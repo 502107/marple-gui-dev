@@ -254,7 +254,7 @@ class App(ctk.CTk):
 
             cv2.imshow("Scan Barcode", frame)
 
-            if (cv2.waitKey(1) & 0xFF == ord('q')) or (cv2.getWindowProperty("Scan Barcode",cv2.WND_PROP_VISIBLE) < 1):
+            if (cv2.waitKey(1) & 0xFF == ord('q')) or (cv2.getWindowProperty("Scan Barcode", cv2.WND_PROP_VISIBLE) < 1):
                 self.scanner_running = False
                 break
 
@@ -262,49 +262,53 @@ class App(ctk.CTk):
         cv2.destroyAllWindows()
         return barcode_data
 
-    def toggle_scanner(self, container, marple_toggle=False):
-        self.run_scanner(container, marple_toggle)
+        cap.release()
+        cv2.destroyAllWindows()
+        return barcode_data
 
-    def run_scanner(self, container, marple_toggle=False):
+
+    def toggle_scanner(self, container, row, marple_toggle=False):
+        self.run_scanner(container, row, marple_toggle)
+
+    def run_scanner(self, container, row, marple_toggle=False):
         with self.lock:
             self.scanner_running = True
         if marple_toggle:
             marple_barcode_data = self.scan_barcode_cam(marple_barcode=True)
-            self.after(0, self.update_marple_entry, container, marple_barcode_data)
-        elif not marple_toggle:
+            self.after(0, self.update_marple_entry, container, row, marple_barcode_data)
+        else:
             odk_barcode_data = self.scan_barcode_cam(marple_barcode=False)
-            self.after(0, self.update_odk_entry, container, odk_barcode_data)
+            self.after(0, self.update_odk_entry, container, row, odk_barcode_data)
         with self.lock:
             self.scanner_running = False
 
-    def update_marple_entry(self, container, marple_barcode_data):
+    def update_marple_entry(self, container, row, marple_barcode_data):
         with self.lock:
             for item in self.barcode_rows:
-                if item["metadata_container"] == container:
+                if item["row_container"] == row:
                     item.update({
                         "marple_barcode": marple_barcode_data
                     })
                     break
 
-    def update_odk_entry(self, container, odk_barcode_data):
+    def update_odk_entry(self, container, row, odk_barcode_data):
         with self.lock:
             for item in self.barcode_rows:
-                if item["metadata_container"] == container:
+                if item["row_container"] == row:
                     item.update({
                         "odk_barcode": odk_barcode_data
                     })
                     break
 
     def scan_barcode_option(self, container, row):
-        barcode_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=lambda: self.toggle_scanner(container, marple_toggle=True), corner_radius=1)
+        barcode_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=lambda: self.toggle_scanner(container, row, marple_toggle=True), corner_radius=1)
         barcode_label.pack(side="left", padx=5)
 
     def scan_two_barcodes_option(self, container, row):
-        # Add two barcode entries
-        qrcode1_label = ctk.CTkButton(container, text="Scan ODK Barcode", font=self.font, command=lambda: self.toggle_scanner(container, marple_toggle=False), corner_radius=1)
+        qrcode1_label = ctk.CTkButton(container, text="Scan ODK Barcode", font=self.font, command=lambda: self.toggle_scanner(container, row, marple_toggle=False), corner_radius=1)
         qrcode1_label.pack(side="left", padx=5)
 
-        qrcode2_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=lambda: self.toggle_scanner(container, marple_toggle=True), corner_radius=1)
+        qrcode2_label = ctk.CTkButton(container, text="Scan MARPLE Barcode", font=self.font, command=lambda: self.toggle_scanner(container, row, marple_toggle=True), corner_radius=1)
         qrcode2_label.pack(side="left", padx=5)
 
     def show_no_barcode_option(self, container, row):
@@ -507,6 +511,11 @@ class App(ctk.CTk):
             # Write the updated metadata back to the file
             with open(metadata_file, 'w') as f:
                 f.writelines(existing_metadata)
+
+            backup_dir = '/marple/upload'
+            if not os.path.exists(backup_dir):
+                os.makedirs(backup_dir)
+            shutil.copy(metadata_file, os.path.join(backup_dir, 'sample_metadata.csv'))
 
         finally:
             self.transfer_in_progress = False
