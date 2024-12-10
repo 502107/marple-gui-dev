@@ -1,3 +1,9 @@
+'''
+Need to include in visualise_tree.py:
+matplotlib.use('Agg')
+
+'''
+
 import os
 import cv2
 import shlex
@@ -233,6 +239,7 @@ class App(ctk.CTk):
                 break
 
             barcodes = pyzbar.decode(frame)
+            
 
             for barcode in barcodes:
                 barcode_data = barcode.data.decode("utf-8")
@@ -241,11 +248,11 @@ class App(ctk.CTk):
                     self.scanner_running = False
                     break
                 elif marple_barcode and not barcode_data.startswith("M"):
+                    self.scanner_running = False
                     self.printin("Invalid barcode. Please scan a MARPLE barcode.")
                     # I used to be able to just continue scanning until a valid barcode was detected
                     # but now it seems to be stuck in an infinite loop if an invalid barcode is scanned
                     # so I'm breaking out of the loop and returning None
-                    self.scanner_running = False
                     break
                 else:
                     self.printin(f"Barcode detected: {barcode_data}")
@@ -261,6 +268,11 @@ class App(ctk.CTk):
         cap.release()
         cv2.destroyAllWindows()
         return barcode_data
+
+        cap.release()
+        cv2.destroyAllWindows()
+        return barcode_data
+
 
     def toggle_scanner(self, container, row, marple_toggle=False):
         self.run_scanner(container, row, marple_toggle)
@@ -557,6 +569,7 @@ class App(ctk.CTk):
         # Run the Snakemake process in a separate thread
         thread = threading.Thread(target=self.run_snakemake)
         thread.start()
+        # thread.join()
         
         self.output_text.pack(pady=(20, 20))
 
