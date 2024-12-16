@@ -16,7 +16,7 @@ from PIL import Image
 from pathlib import Path
 from pyzbar import pyzbar
 import customtkinter as ctk
-from tkinter import Menu, filedialog, ttk
+from tkinter import Menu, filedialog, ttk, messagebox
 
 class App(ctk.CTk):
     def __init__(self):
@@ -224,11 +224,16 @@ class App(ctk.CTk):
             self.show_no_barcode_option(metadata_container, row)
             
     def scan_barcode_cam(self, marple_barcode=False):
-        cap = cv2.VideoCapture(0)
+        cam_index = self.find_external_camera()
+        if cam_index is None:
+            messagebox.showerror("Error", "No camera found!")
+            return
+        
+        cap = cv2.VideoCapture(cam_index)
         if not cap.isOpened():
-            self.printin("Error: Could not open camera.")
+            messagebox.showerror("Error", "Could not open any camera.")
             return None
-
+        
         barcode_data = None
         self.scanner_running = True
 
@@ -239,7 +244,6 @@ class App(ctk.CTk):
                 break
 
             barcodes = pyzbar.decode(frame)
-            
 
             for barcode in barcodes:
                 barcode_data = barcode.data.decode("utf-8")
@@ -248,11 +252,11 @@ class App(ctk.CTk):
                     self.scanner_running = False
                     break
                 elif marple_barcode and not barcode_data.startswith("M"):
-                    self.scanner_running = False
-                    self.printin("Invalid barcode. Please scan a MARPLE barcode.")
                     # I used to be able to just continue scanning until a valid barcode was detected
                     # but now it seems to be stuck in an infinite loop if an invalid barcode is scanned
                     # so I'm breaking out of the loop and returning None
+                    self.scanner_running = False
+                    messagebox.showerror("Error","Invalid barcode. Please scan a MARPLE barcode.")
                     break
                 else:
                     self.printin(f"Barcode detected: {barcode_data}")
@@ -269,10 +273,36 @@ class App(ctk.CTk):
         cv2.destroyAllWindows()
         return barcode_data
 
-        cap.release()
-        cv2.destroyAllWindows()
-        return barcode_data
+    def find_external_camera(self):
+        max_inputs = 8
+        camera_indices = []
+        
+        for i in range(max_inputs):
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                # Test if camera works
+                ret, _ = cap.read()
+                if ret:
+                    camera_indices.append(i)
+                cap.release()
+        
+        # Identify external webcam (assume external by resolution)
+        for index in camera_indices:
+            cap = cv2.VideoCapture(index)
+            if cap.isOpened():
+                # Retrieve resolution
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                print(f"Camera {index}: {width}x{height}")
+                cap.release()
+                if width > 1280 or height > 720:
+                    return index
+        
+        if camera_indices[0] == 0:
+            messagebox.showwarning("Warning",f"External webcam not found. Falling back to the default camera ({height}p).")
 
+        # Default to the first available camera if no external is found
+        return camera_indices[0] if camera_indices else None
 
     def toggle_scanner(self, container, row, marple_toggle=False):
         self.run_scanner(container, row, marple_toggle)
