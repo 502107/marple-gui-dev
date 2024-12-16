@@ -6,11 +6,13 @@ matplotlib.use('Agg')
 
 import os
 import cv2
+import time
 import shlex
 import psutil
 import shutil
 import threading
 import subprocess
+import numpy as np
 import tkinter as tk
 from PIL import Image
 from pathlib import Path
@@ -237,13 +239,49 @@ class App(ctk.CTk):
         barcode_data = None
         self.scanner_running = True
 
+        # Add timeout to limit cpu/gpu usage
+        start_time = time.time()
+
         while self.scanner_running:
+            elapsed_time = time.time() - start_time
+            if elapsed_time > 20:  # 20-second timeout
+                messagebox.showwarning("Warning","Camera timeout. No barcode detected within 20 seconds.")
+                break
+
             ret, frame = cap.read()
             if not ret:
                 self.printin("Error: Failed to capture image.")
                 break
 
-            barcodes = pyzbar.decode(frame)
+            # Trying to increase the chances of successful scan by enhancing image
+            # Convert frame to grayscale
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # Apply a sharpening filter
+            kernel = np.array([[0, -1, 0], 
+                            [-1, 5, -1], 
+                            [0, -1, 0]])
+            
+            # Combine sharpening with contrast enhancement using CLAHE (Contrast Limited Adaptive Histogram Equalization))
+            
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            equalized = clahe.apply(gray_frame)
+
+            # Sharpen after histogram equalization
+            sharp_frame = cv2.filter2D(equalized, -1, kernel)
+
+            # Adjust brightness and contrast (clip values to stay in valid range)
+            alpha = 2    # Contrast control (1.0-3.0)
+            beta = 20    # Brightness control (0-100)
+            enhanced_frame = cv2.convertScaleAbs(sharp_frame, alpha=alpha, beta=beta)
+
+            # Upscale image for better decoding
+            upscale_factor = 3
+            enhanced_frame = cv2.resize(enhanced_frame, 
+                                        (frame.shape[1] * upscale_factor, frame.shape[0] * upscale_factor), 
+                                        interpolation=cv2.INTER_LINEAR)
+
+            barcodes = pyzbar.decode(enhanced_frame)
 
             for barcode in barcodes:
                 barcode_data = barcode.data.decode("utf-8")
@@ -299,7 +337,7 @@ class App(ctk.CTk):
                     return index
         
         if camera_indices[0] == 0:
-            messagebox.showwarning("Warning",f"External webcam not found. Falling back to the default camera ({height}p).")
+            self.printin(f"External webcam not found. Falling back to the default camera ({height}p).")
 
         # Default to the first available camera if no external is found
         return camera_indices[0] if camera_indices else None
@@ -443,7 +481,7 @@ class App(ctk.CTk):
 
     def transfer_reads(self):
         if not self.minknow_dir or self.minknow_dir == self.minknow_default_dir:
-            self.printin("MinKNOW directory not selected.")
+            messagebox.showerror("Error","MinKNOW directory not selected.")
             return
 
         for row in self.barcode_rows:
@@ -451,25 +489,25 @@ class App(ctk.CTk):
             if row["dropdown_var"].get() == "Recorded In-Field":
                 marple_barcode = row.get("marple_barcode")
                 if not marple_barcode or not marple_barcode.strip().startswith("M"):
-                    self.printin("Please scan a valid QR code.")
+                    messagebox.showerror("Please scan a valid QR code.")
                     return
 
             elif row["dropdown_var"].get() == "Extracted from Live":
                 odk_barcode = row.get("odk_barcode")
                 marple_barcode = row.get("marple_barcode")
                 if not odk_barcode or not marple_barcode or not marple_barcode.strip().startswith("M"):
-                    self.printin("Please scan valid QR codes.")
+                    messagebox.showerror("Please scan valid QR codes.")
                     return
 
             elif row["dropdown_var"].get() == "No Barcode":
                 if any(not field.get().strip() for field in [
                     row["sample"], row["collection_date"], row["location"],
                     row["country"], row["collector_name"], row["cultivar"]]):
-                    self.printin("Please fill in all metadata fields.")
+                    messagebox.showerror("Please fill in all metadata fields.")
                     
         # Check if a transfer is already in progress
         if self.transfer_in_progress:
-            self.show_warning("Transfer Reads Process Running. Wait until it finishes.")
+            messagebox.showwarning("Warning","Transfer Reads Process Running. Wait until it finishes.")
             return
 
         # Start the transfer process
@@ -486,7 +524,7 @@ class App(ctk.CTk):
         try:
             total_barcodes = len(self.barcode_rows)
             if total_barcodes == 0:
-                self.printin("No barcodes to process.")
+                messagebox.showerror("Error","No barcodes to process.")
                 return
 
             # Read existing metadata
@@ -541,9 +579,9 @@ class App(ctk.CTk):
                                     existing_metadata.append(new_metadata_line)
 
                                 except Exception as e:
-                                    self.printin(f"An error occurred while processing barcode{barcode}: {e}")
+                                    messagebox.showerror("Error",f"An error occurred while processing barcode{barcode}: {e}")
                             else:
-                                self.printin(f"Barcode{barcode} not found in MinKNOW directory.")
+                                messagebox.showerror("Error",f"Barcode{barcode} not found in MinKNOW directory.")
 
             # Write the updated metadata back to the file
             with open(metadata_file, 'w') as f:
@@ -611,11 +649,11 @@ class App(ctk.CTk):
                     self.stop_marple(forced=False)
                     self.start_marple()
                 else:
-                    self.printin("mamba environment marple-env not found.")
+                    messagebox.showerror("Error","mamba environment marple-env not found.")
             except subprocess.CalledProcessError as e:
-                self.printin(f"Error running command: {e}")
+                messagebox.showerror("Error",f"Error running command: {e}")
         else:
-            self.printin("mamba not found.")
+            messagebox.showerror("Error","mamba not found.")
         
         self.progress_bar.stop()
         self.progress_bar.pack_forget()
@@ -634,7 +672,7 @@ class App(ctk.CTk):
             
             self.printin("MARPLE Snakemake workflow started.")
         except Exception as e:
-            self.printin(f"Failed to start Snakemake: {e}")
+            messagebox.showerror("Error",f"Failed to start Snakemake: {e}")
 
     def capture_output(self, stream):
         # Append captured output to the output_lines
@@ -650,7 +688,7 @@ class App(ctk.CTk):
         # Stop the Snakemake process if running
         if self.snakemake_process and self.snakemake_process.poll() is None:
             self.snakemake_process.terminate()
-            self.printin("MARPLE process terminated.")
+            messagebox.showinfo("MARPLE process terminated.")
             
             # Kill child processes of Snakemake (if any)
             try:
